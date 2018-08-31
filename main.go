@@ -94,9 +94,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	var content = string(contentBytes)
 	var leadContent string
 	if testRedisConnection(redisAddr) {
-		leadContent = "This is a simple service application(connected to Redis)<br>~ deployed by Cloud 66 ~"
+		leadContent = "This is a simple service application(connected to Redis). Deployed by Cloud 66 ~"
 	} else {
-		leadContent = "This is a simple single service application<br>~ deployed by Cloud 66 ~"
+		leadContent = "This is a simple single service application. Deployed by Cloud 66"
 	}
 	content = strings.Replace(content, "{{LEAD}}", leadContent, -1)
 	w.Write([]byte(content))
