@@ -4,13 +4,17 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/go-redis/redis"
 )
 
 type key int
@@ -21,13 +25,14 @@ const (
 
 var (
 	listenAddr string
+	redisAddr  string
 	healthy    int32
 )
 
 // this pushes new items onto a stack on a random cycle
 func main() {
 	flag.StringVar(&listenAddr, "binding", "0.0.0.0:5000", "Server listen address")
-
+	flag.StringVar(&redisAddr, "redis", "redis:6379", "Redis address (not required)")
 	flag.Parse()
 
 	cancel := make(chan os.Signal)
@@ -35,9 +40,12 @@ func main() {
 
 	logger := log.New(os.Stdout, "http: ", log.LstdFlags)
 	logger.Printf("Server is starting on %s...\n", listenAddr)
+	logger.Printf("Checking Redis on %s...\n", redisAddr)
 
 	router := http.NewServeMux()
-	router.Handle("/", http.FileServer(http.Dir("./static")))
+	router.Handle("/style.css", http.FileServer(http.Dir("./static")))
+	router.Handle("/background.jpg", http.FileServer(http.Dir("./static")))
+	router.HandleFunc("/", handler)
 
 	nextRequestID := func() string {
 		return fmt.Sprintf("%d", time.Now().UnixNano())
@@ -81,6 +89,19 @@ func main() {
 	logger.Println("Server stopped")
 }
 
+func handler(w http.ResponseWriter, r *http.Request) {
+	var contentBytes, _ = ioutil.ReadFile("./static/index.html")
+	var content = string(contentBytes)
+	var leadContent string
+	if testRedisConnection(redisAddr) {
+		leadContent = "This is a simple service application(connected to Redis)<br>~ deployed by Cloud 66 ~"
+	} else {
+		leadContent = "This is a simple single service application<br>~ deployed by Cloud 66 ~"
+	}
+	content = strings.Replace(content, "{{LEAD}}", leadContent, -1)
+	w.Write([]byte(content))
+}
+
 func healthz() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if atomic.LoadInt32(&healthy) == 1 {
@@ -89,6 +110,20 @@ func healthz() http.Handler {
 		}
 		w.WriteHeader(http.StatusServiceUnavailable)
 	})
+}
+
+func testRedisConnection(redisAddress string) bool {
+	client := redis.NewClient(&redis.Options{
+		Addr:     redisAddress,
+		Password: "", // no password set
+		DB:       0,  // use default DB
+	})
+	pong, _ := client.Ping().Result()
+	if pong == "PONG" {
+		return true
+	}
+	return false
+	// Output: PONG <nil>
 }
 
 func logging(logger *log.Logger) func(http.Handler) http.Handler {
