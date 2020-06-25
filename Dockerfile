@@ -1,11 +1,8 @@
-FROM golang:1.10
+FROM golang:1.13
 
 WORKDIR /go/src/helloworld
-COPY main.go .
+COPY . .
 RUN go get -d -v ./...
 RUN go build
-
-RUN mkdir static
-COPY static/. static/.
 
 CMD ["/go/src/helloworld/helloworld"]
